@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- Changing this from 'net10.0' to 'net10.0-macos' enables AppKit -->
+        <TargetFramework>net10.0-macos</TargetFramework>
+        <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+        <UseNativeComInterop>true</UseNativeComInterop>
+        <!-- Hides the app from the Dock so it only lives in the Menu Bar -->
+        <IsPackaged>true</IsPackaged>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <InfoPlist>Info.plist</InfoPlist>
+    </PropertyGroup>
+
+</Project>
