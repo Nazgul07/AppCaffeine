@@ -53,6 +53,7 @@ public class AppDelegate : NSApplicationDelegate
             _running = !_running;
             if (_running) StartLoop(); else StopLoop();
             RefreshMenu();
+            SaveSettings();
         };
         menu.AddItem(toggleItem);
         menu.AddItem(NSMenuItem.SeparatorItem);
@@ -120,8 +121,8 @@ public class AppDelegate : NSApplicationDelegate
         
         _statusItem!.Menu = menu;
         
-        var launchItem = new NSMenuItem("Launch at Login", (s, e) => {
-            ToggleLaunchAtLogin(((NSMenuItem)s!));
+        var launchItem = new NSMenuItem("Launch at Login", (s, _) => {
+            ToggleLaunchAtLogin((NSMenuItem)s!);
         });
 
         // Set initial checkmark state based on system status
@@ -130,6 +131,7 @@ public class AppDelegate : NSApplicationDelegate
         menu.AddItem(launchItem);
         menu.AddItem(NSMenuItem.SeparatorItem);
     }
+    
     private void SaveSettings()
     {
         var defaults = NSUserDefaults.StandardUserDefaults;
@@ -147,6 +149,7 @@ public class AppDelegate : NSApplicationDelegate
         else
             defaults.RemoveObject("TargetWindowName");
 
+        defaults.SetBool(_running, "Running");
         defaults.Synchronize();
     }
 
@@ -156,6 +159,11 @@ public class AppDelegate : NSApplicationDelegate
         var bundleId = defaults.StringForKey("TargetBundleId");
         var winName = defaults.StringForKey("TargetWindowName");
         var appName = defaults.StringForKey("TargetAppName");
+        _running = defaults.BoolForKey("Running");
+        if (_running)
+        {
+            StartLoop();
+        }
 
         if (string.IsNullOrEmpty(bundleId)) return;
         // Try to find if that app is currently running to get its PID
@@ -262,11 +270,15 @@ public static class WindowAutomator
     private static extern int AXUIElementPerformAction(IntPtr element, IntPtr action);
 
 
-    public static void SendKeyToSpecificWindow(int pid, string windowTitle, ushort keyCode)
+    public static void SendKeyToSpecificWindow(int targetPid, string? windowTitle, ushort keyCode)
     {
-        IntPtr appRef = AXUIElementCreateApplication(pid);
+        // 1. Capture the currently active app BEFORE we do anything
+        var previousApp = NSWorkspace.SharedWorkspace.FrontmostApplication;
 
-        if (AXUIElementCopyAttributeValue(appRef, ((NSString)"AXWindows").Handle, out var windowListPtr) == 0)
+        IntPtr appRef = AXUIElementCreateApplication(targetPid);
+        IntPtr windowListPtr;
+    
+        if (AXUIElementCopyAttributeValue(appRef, ((NSString)"AXWindows").Handle, out windowListPtr) == 0)
         {
             var windows = Runtime.GetNSObject<NSArray>(windowListPtr);
             if (windows != null)
@@ -276,20 +288,24 @@ public static class WindowAutomator
                     AXUIElementCopyAttributeValue(winRef, ((NSString)"AXTitle").Handle, out var titlePtr);
                     var currentTitle = ((NSString)Runtime.GetNSObject(titlePtr)!).ToString();
 
-                    // Only proceed if this is the EXACT window we want
-                    if (currentTitle.Contains(windowTitle))
+                    if (string.IsNullOrEmpty(windowTitle) || currentTitle.Contains(windowTitle))
                     {
-                        // 1. Tell the app to make THIS window its internal 'main' window
+                        // 2. Focus the target window
                         AXUIElementPerformAction(winRef, ((NSString)"AXRaise").Handle);
 
-                        // 2. Now send the key to the PID; the app will route it to the 'raised' window
+                        // 3. Send the key via CGEvent
                         IntPtr keyDown = CGEventCreateKeyboardEvent(IntPtr.Zero, keyCode, true);
-                        CGEventPostToPid(pid, keyDown);
+                        CGEventPostToPid(targetPid, keyDown);
                         CFRelease(keyDown);
 
                         IntPtr keyUp = CGEventCreateKeyboardEvent(IntPtr.Zero, keyCode, false);
-                        CGEventPostToPid(pid, keyUp);
+                        CGEventPostToPid(targetPid, keyUp);
                         CFRelease(keyUp);
+
+                        // 4. RESTORE FOCUS: Bring the previous app back to the front
+                        // NSApplicationActivateOptions.AllWindows ensures all windows of the previous app return
+                        previousApp.Activate(NSApplicationActivationOptions.ActivateAllWindows);
+
                         break;
                     }
                 }
