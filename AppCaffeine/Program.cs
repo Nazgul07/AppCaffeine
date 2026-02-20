@@ -25,7 +25,7 @@ public class AppDelegate : NSApplicationDelegate
     { 
         LoadSettings(); // <--- Add this
         _statusItem = NSStatusBar.SystemStatusBar.CreateStatusItem(NSStatusItemLength.Variable);
-        _statusItem.Button.Title = "⌨️";
+        _statusItem.Button.Title = "☕️";
         RefreshMenu();
     }
     private NSImage ResizeImage(NSImage sourceImage, CGSize newSize)
@@ -228,7 +228,7 @@ public class AppDelegate : NSApplicationDelegate
 
     private void StartLoop()
     {
-        if (!_targetPid.HasValue) return;
+        //if (!_targetPid.HasValue) return;
         _cts = new CancellationTokenSource();
 
         Task.Run(async () => {
@@ -238,7 +238,7 @@ public class AppDelegate : NSApplicationDelegate
                 var process = Process.GetProcessesByName(_targetAppName).FirstOrDefault();
                 if (process != null && _targetWindowName != null)
                 {
-                    WindowAutomator.SendKeyToSpecificWindow(process.Id, _targetWindowName, 0x5A); //F20 key
+                    WindowAutomator.SendKeyToSpecificWindow(process.Id, _targetWindowName, 0x3D); //0x3D = Alt/Option key
                 }
                 await Task.Delay(TimeSpan.FromMinutes(5));
             }
@@ -250,7 +250,6 @@ public class AppDelegate : NSApplicationDelegate
 
 public static class WindowAutomator
 {
-    private const string HiServices = "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices";
     [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")]
     private static extern void CFRelease(IntPtr obj);
 
@@ -266,19 +265,12 @@ public static class WindowAutomator
     [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
     private static extern void CGEventPostToPid(int pid, IntPtr eventRef);
 
-    [DllImport(HiServices)]
-    private static extern int AXUIElementPerformAction(IntPtr element, IntPtr action);
-
-
     public static void SendKeyToSpecificWindow(int targetPid, string? windowTitle, ushort keyCode)
     {
-        // 1. Capture the currently active app BEFORE we do anything
-        var previousApp = NSWorkspace.SharedWorkspace.FrontmostApplication;
-
         IntPtr appRef = AXUIElementCreateApplication(targetPid);
-        IntPtr windowListPtr;
-    
-        if (AXUIElementCopyAttributeValue(appRef, ((NSString)"AXWindows").Handle, out windowListPtr) == 0)
+        
+
+        if (AXUIElementCopyAttributeValue(appRef, ((NSString)"AXWindows").Handle, out var windowListPtr) == 0)
         {
             var windows = Runtime.GetNSObject<NSArray>(windowListPtr);
             if (windows != null)
@@ -290,9 +282,6 @@ public static class WindowAutomator
 
                     if (string.IsNullOrEmpty(windowTitle) || currentTitle.Contains(windowTitle))
                     {
-                        // 2. Focus the target window
-                        AXUIElementPerformAction(winRef, ((NSString)"AXRaise").Handle);
-
                         // 3. Send the key via CGEvent
                         IntPtr keyDown = CGEventCreateKeyboardEvent(IntPtr.Zero, keyCode, true);
                         CGEventPostToPid(targetPid, keyDown);
@@ -301,10 +290,6 @@ public static class WindowAutomator
                         IntPtr keyUp = CGEventCreateKeyboardEvent(IntPtr.Zero, keyCode, false);
                         CGEventPostToPid(targetPid, keyUp);
                         CFRelease(keyUp);
-
-                        // 4. RESTORE FOCUS: Bring the previous app back to the front
-                        // NSApplicationActivateOptions.AllWindows ensures all windows of the previous app return
-                        previousApp.Activate(NSApplicationActivationOptions.ActivateAllWindows);
 
                         break;
                     }

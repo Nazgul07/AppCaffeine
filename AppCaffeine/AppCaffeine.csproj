@@ -13,4 +13,8 @@
         <InfoPlist>Info.plist</InfoPlist>
     </PropertyGroup>
 
+    <ItemGroup>
+      <BundleResource Include="AppIcon.icns" />
+    </ItemGroup>
+
 </Project>
